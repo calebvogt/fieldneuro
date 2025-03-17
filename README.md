@@ -1,5 +1,5 @@
 
-# FieldNeuroToolbox (FNT)
+# FieldNeuroToolbox (fnt)
 
 Preprocessing and analysis toolbox for neurobehavioral data. 
 
@@ -19,19 +19,7 @@ Overview
 
 1. Clone the fnt github repo. 
 
-2. Create a new conda environment using a new cmd window (or the integrated terminal in VS code). 
-- Note that conda environments can be stored in a user profile and across users (C:\anaconda3\envs). This can matter. I like to store things in the C: drive typically. 
-- install the package in editable mode. Any changes made to the code within the github repo will be availbale within the conda environment. 
-
-```bash
-conda create --name fnt python=3.10 
-conda activate fnt 
-cd C:\GitHub\fnt 
-pip install -e . 
-pip install -r requirements.txt
-```
-
-3. (optional) Add anaconda to system path so you can run fnt conda environment in standard cmd window
+2. Add anaconda to system path so you can run fnt conda environment in standard cmd window
 - open anaconda prompt:
 
 ```bash
@@ -47,20 +35,32 @@ C:\Users\YourUsername\anaconda3
 C:\Users\YourUsername\anaconda3\Library\bin
 
 
+3. Create a new conda environment using a new cmd window (or the integrated terminal in VS code). 
+- Note that conda environments can be stored in a user profile and across users (C:\anaconda3\envs). This can matter. I like to store things in the C: drive typically. 
+- install the package in editable mode. Any changes made to the code within the github repo will be availbale within the conda environment. 
+
+```bash
+conda create --name fnt
+conda activate fnt 
+cd C:\GitHub\fnt 
+pip install -e . 
+```
+
+
 
 ## Mac Installation
 
 ```bash
-conda create --name fnt python=3.10 
+conda create --name fnt
 conda activate fnt 
 cd ~/Documents/GitHub/fnt # relative to home directory
 pip install -e . 
-pip install -r requirements.txt
 ```
 
 
 Notes: 
 - if things aren't runnning in the jupyter notebooks, try restarting the kernel/environment. 
+- package dependencies listed in the pyproject.toml
 
 ## Organization and general notes
 - Core functions are stored in fnt folder
