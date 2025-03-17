@@ -1,0 +1,12 @@
+[build-system]
+requires = ["setuptools>=64", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "fnt"
+version = "0.1"
+dependencies = []
+requires-python = ">=3.8"
+
+[tool.setuptools.packages.find]
+include = ["fnt"]

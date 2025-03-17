@@ -1,0 +1,8 @@
+README.md
+pyproject.toml
+setup.py
+fnt/__init__.py
+fnt.egg-info/PKG-INFO
+fnt.egg-info/SOURCES.txt
+fnt.egg-info/dependency_links.txt
+fnt.egg-info/top_level.txt
