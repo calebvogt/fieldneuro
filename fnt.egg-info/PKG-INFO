@@ -2,3 +2,7 @@ Metadata-Version: 2.2
 Name: fnt
 Version: 0.1
 Requires-Python: >=3.8
+Requires-Dist: opencv-python
+Requires-Dist: numpy
+Requires-Dist: ffmpeg-python
+Requires-Dist: tk
