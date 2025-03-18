@@ -5,7 +5,7 @@ from tkinter import filedialog
 import subprocess
 import numpy as np
 
-def ffmpeg_TrimVideos():
+def trim_video():
     """Opens a file dialog to select a video file and provides a GUI for trimming with previews."""
     file_path = filedialog.askopenfilename(filetypes=[("Video Files", "*.mp4;*.avi;*.mov")])
     if file_path:
@@ -25,10 +25,7 @@ def _process_video(video_path):
     # Trim window
     root = tk.Tk()
     root.title("Trim Video")
-
-    # --- NEW: Maximize Window on Open ---
-    root.state("zoomed")  # For Windows, this auto-maximizes the window
-    # -----------------------------------
+    root.state("zoomed")  # Maximize window on open
 
     # Variables for start and end times
     start_time = tk.DoubleVar(value=0)
@@ -74,12 +71,12 @@ def _process_video(video_path):
         time_var.set(new_time)
         update_preview(time_var, start_canvas if time_var == start_time else end_canvas)
 
-    # Buttons Layout: Tighter spacing (5px) & centered below each slider
+    # Buttons Layout
     button_spacing = {"padx": 2, "pady": 5}  # Reduced horizontal spacing
 
     # Buttons for Start Time
     start_button_frame = tk.Frame(root)
-    start_button_frame.grid(row=3, column=0, columnspan=6, pady=5)  # Centered under slider
+    start_button_frame.grid(row=3, column=0, columnspan=6, pady=5)
 
     tk.Button(start_button_frame, text="-60s", command=lambda: adjust_slider(start_time, -60)).pack(side="left", **button_spacing)
     tk.Button(start_button_frame, text="-30s", command=lambda: adjust_slider(start_time, -30)).pack(side="left", **button_spacing)
@@ -90,7 +87,7 @@ def _process_video(video_path):
 
     # Buttons for End Time
     end_button_frame = tk.Frame(root)
-    end_button_frame.grid(row=3, column=6, columnspan=6, pady=5)  # Centered under slider
+    end_button_frame.grid(row=3, column=6, columnspan=6, pady=5)
 
     tk.Button(end_button_frame, text="-60s", command=lambda: adjust_slider(end_time, -60)).pack(side="left", **button_spacing)
     tk.Button(end_button_frame, text="-30s", command=lambda: adjust_slider(end_time, -30)).pack(side="left", **button_spacing)
@@ -99,8 +96,8 @@ def _process_video(video_path):
     tk.Button(end_button_frame, text="+30s", command=lambda: adjust_slider(end_time, 30)).pack(side="left", **button_spacing)
     tk.Button(end_button_frame, text="+60s", command=lambda: adjust_slider(end_time, 60)).pack(side="left", **button_spacing)
 
-    def trim_video():
-        """Executes FFmpeg to trim the video and prints output in real-time."""
+    def trim_and_close():
+        """Executes FFmpeg to trim the video, prints output, and closes GUI."""
         start = start_time.get()
         end = end_time.get()
         if end <= start:
@@ -131,8 +128,11 @@ def _process_video(video_path):
         process.wait()
         print(f"Trimmed video saved as: {output_file}")
 
+        # Close the GUI after trimming is complete
+        root.destroy()
+
     # Trim button
-    trim_button = tk.Button(root, text="Trim Video", command=trim_video)
+    trim_button = tk.Button(root, text="Trim Video", command=trim_and_close)
     trim_button.grid(row=4, column=3, columnspan=6, pady=20)
 
     root.mainloop()
@@ -141,4 +141,4 @@ def _process_video(video_path):
 
 # Only run if the script is executed directly
 if __name__ == "__main__":
-    ffmpeg_TrimVideos()
+    trim_video()

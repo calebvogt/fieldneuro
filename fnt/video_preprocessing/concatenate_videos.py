@@ -3,7 +3,7 @@ import subprocess
 import tkinter as tk
 from tkinter import filedialog
 
-def ffmpeg_ConcatenateVideos():
+def concatenate_videos():
     """Prompts user to select a folder and concatenates all video files within it using FFmpeg."""
     
     # Open file dialog to select a directory
@@ -57,4 +57,4 @@ def ffmpeg_ConcatenateVideos():
 
 # Only run if the script is executed directly
 if __name__ == "__main__":
-    ffmpeg_ConcatenateVideos()
+    concatenate_videos()
