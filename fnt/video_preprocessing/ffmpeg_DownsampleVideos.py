@@ -1,3 +1,7 @@
+# To Do
+# navigate to folder with videos
+# check for presence of smis; hardcode if so
+
 ## cmd line one-liner version of this: 
 # mkdir proc && for %i in (*.avi *.mp4 *.mov) do ffmpeg -i "%i" -vcodec libx265 -preset ultrafast -crf 15 -pix_fmt yuv420p -vf "scale=1920:1080:force_original_aspect_ratio=decrease:eval=frame,pad=1920:1080:-1:-1:color=black,format=gray" -an -r 30 -max_muxing_queue_size 10000000 "proc\%~ni.mp4"
 
