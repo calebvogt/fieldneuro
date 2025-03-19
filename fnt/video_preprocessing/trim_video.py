@@ -1,3 +1,5 @@
+# TODO: have single ffmpeg line printed that updates, instead of printing a new line for every speed/frame update etc. 
+
 import os
 import cv2
 import tkinter as tk
