@@ -1,5 +1,17 @@
-# to do: 
-# if there are smi timestamps from the security cameras in the folder, prompt the user if the timestamps should be hardcoded into the videos, potentially even in a specific location. 
+# TODO: if there are smi timestamps from the security cameras in the folder, prompt the user if the timestamps should be hardcoded into the videos, potentially even in a specific location. 
+# Solution for now: use this only for videos with .smi files. Harvested from old CCV scripts. getting this in a python script is more hassle than its worth at this time. 
+## open powershell window as administrator or Shift + Right Clickopen powershell window. 
+## rename all files if there are spaces in the filenames. 
+# Dir | Rename-Item –NewName { $_.name –replace “ “,”_” }
+
+## add pre-fix to all files in a folder in powershell (optional)
+#(Get-ChildItem -File) | Rename-Item -NewName { "T004_OB_" + $_.Name }
+
+## start command line within powershell
+# cmd
+
+## Functional for downsampling and adding subtitles from iDVR-pro videos that come with .smi files. However, this creates thousands of duplicate frames which is DUE TO THE SMI FILE. 
+# for %i in (*.avi) do ffmpeg -i "%i" -vcodec libx265 -preset ultrafast -crf 18 -pix_fmt yuv420p -r 30 -vsync cfr -an -max_muxing_queue_size 10000000 -vf "scale=1920:1080:force_original_aspect_ratio=decrease:eval=frame,pad=1920:1080:-1:-1:color=black,format=gray,subtitles="%~ni.smi":force_style='FontSize=10,Alignment=1,BorderStyle=3,Outline=1,Shadow=0,MarginV=20'" "%~ni.mp4"
 
 
 import os
@@ -48,10 +60,13 @@ def downsample_videos():
         # FFmpeg command
         cmd = [
             "ffmpeg", "-i", video_file,
-            "-vcodec", "libx265", "-preset", "ultrafast", "-crf", "15",
+            "-vcodec", "libx265", "-preset", "ultrafast", "-crf", "18",
             "-pix_fmt", "yuv420p",
             "-vf", "scale=1920:1080:force_original_aspect_ratio=decrease:eval=frame,pad=1920:1080:-1:-1:color=black,format=gray",
-            "-an", "-r", "30", "-max_muxing_queue_size", "10000000",
+            "-r", "30", # force constant frame rate at 30fps
+            "-vsync", "cfr", # CFR mode
+            "-an", # disable audio
+            "-max_muxing_queue_size", "10000000",
             output_file
         ]
 
@@ -64,9 +79,9 @@ def downsample_videos():
 
         process.wait()
 
-        print(f"✅ Done: {output_file}")
+        print(f"Done: {output_file}")
 
-    print("🎉 All videos processed and saved in 'proc' folder!")
+    print("All videos processed and saved in 'proc' folder!")
 
 # Run function if executed directly
 if __name__ == "__main__":
