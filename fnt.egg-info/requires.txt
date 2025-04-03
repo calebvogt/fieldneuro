@@ -2,3 +2,9 @@ opencv-python
 numpy
 ffmpeg-python
 tk
+pandas
+matplotlib
+tqdm
+seaborn
+scipy
+shapely
