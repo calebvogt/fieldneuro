@@ -7,7 +7,7 @@ from tkinter import filedialog
 import subprocess
 import numpy as np
 
-def trim_video():
+def video_trim():
     """Opens a file dialog to select a video file and provides a GUI for trimming with previews."""
     file_path = filedialog.askopenfilename(filetypes=[("Video Files", "*.mp4;*.avi;*.mov")])
     if file_path:
@@ -143,4 +143,4 @@ def _process_video(video_path):
 
 # Only run if the script is executed directly
 if __name__ == "__main__":
-    trim_video()
+    video_trim()

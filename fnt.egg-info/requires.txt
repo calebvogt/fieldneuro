@@ -8,3 +8,4 @@ tqdm
 seaborn
 scipy
 shapely
+openpyxl

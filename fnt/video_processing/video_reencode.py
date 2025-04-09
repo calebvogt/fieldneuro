@@ -5,7 +5,7 @@ import re
 import tkinter as tk
 from tkinter import filedialog
 
-def reencode_videos():
+def video_reencode():
     """Allows the user to select a folder containing videos and re-encodes them while preserving quality and ensuring seekability."""
 
     # Open file dialog to select a directory
@@ -68,4 +68,4 @@ def reencode_videos():
 
 # Only run if the script is executed directly
 if __name__ == "__main__":
-    reencode_videos()
+    video_reencode()

@@ -15,7 +15,9 @@ dependencies = [
     "tqdm",
     "seaborn",
     "scipy",
-    "shapely"
+    "shapely",
+    "openpyxl",
+    "soundfile"
 ]
 requires-python = ">=3.8"
 

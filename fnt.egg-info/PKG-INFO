@@ -12,3 +12,4 @@ Requires-Dist: tqdm
 Requires-Dist: seaborn
 Requires-Dist: scipy
 Requires-Dist: shapely
+Requires-Dist: openpyxl
