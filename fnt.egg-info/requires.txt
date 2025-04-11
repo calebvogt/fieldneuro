@@ -9,3 +9,5 @@ seaborn
 scipy
 shapely
 openpyxl
+soundfile
+spyder-kernels

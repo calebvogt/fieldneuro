@@ -31,11 +31,12 @@ def video_downsample(gpu=False):
                 cmd = [
                     "ffmpeg", "-hwaccel", "cuda", "-i", input_path,
                     "-vcodec", "hevc_nvenc", # gpu acceleration
+                    "-preset", "hq", # 
                     "-rc:v", "vbr",     # variable bitrate mode
-                    "-cq:v", "28",      # qualtiy (15-32): lower is better
-                    "-b:v", "1M",        # average bitrate
-                    "-maxrate", "1M",    # maximum bitrate
-                    "-bufsize", "2M",    # buffer size
+                    "-cq:v", "30",      # qualtiy (15-32): lower is better
+                    "-b:v", "0.8M",        # target average bitrate
+                    "-maxrate", "0.8M",    # maximum bitrate
+                    "-bufsize", "1.6M",    # buffer size
                     "-pix_fmt", "yuv420p",
                     "-vf", "scale=1920:1080:force_original_aspect_ratio=decrease:eval=frame,"
                            "pad=1920:1080:-1:-1:color=black,format=gray",

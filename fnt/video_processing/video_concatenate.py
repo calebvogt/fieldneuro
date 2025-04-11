@@ -1,3 +1,9 @@
+## TODO:
+# Add a second ffmpeg step that moves the start atom to the beginning of the concatenated file. Not necessary unless doing so for sleap, but still might prove useful. 
+# ffmpeg -i output.mp4 -movflags +faststart -c copy output_seekable.mp4 
+
+
+
 import os
 import subprocess
 import tkinter as tk
@@ -41,7 +47,7 @@ def video_concatenate():
             fp.write(f"file '{video}'\n")  # Correctly format filenames
 
     # Run FFmpeg to concatenate videos and print real-time output
-    command = ["ffmpeg", "-f", "concat", "-safe", "0", "-i", "mylist.txt", "-c", "copy", "output.mp4"]
+    command = ["ffmpeg", "-f", "concat", "-safe", "0", "-i", "mylist.txt", "-c", "copy", "concatenated_output.mp4"]
     print("\nConcatenating videos... This may take a moment.\n")
 
     process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)

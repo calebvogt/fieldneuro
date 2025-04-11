@@ -13,3 +13,5 @@ Requires-Dist: seaborn
 Requires-Dist: scipy
 Requires-Dist: shapely
 Requires-Dist: openpyxl
+Requires-Dist: soundfile
+Requires-Dist: spyder-kernels
