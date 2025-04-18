@@ -10,4 +10,4 @@ scipy
 shapely
 openpyxl
 soundfile
-spyder-kernels
+moviepy
