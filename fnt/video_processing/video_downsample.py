@@ -55,10 +55,10 @@ def video_downsample(gpu=False):
                     "-preset", "fast",
                     "-crf", "25",
                     "-pix_fmt", "yuv420p",
-                    "-vf", "scale=1920:1080:force_original_aspect_ratio=decrease:eval=frame,"
+                    "-vf", "fps=30,scale=1920:1080:force_original_aspect_ratio=decrease:eval=frame,"
                            "pad=1920:1080:-1:-1:color=black,format=gray",
-                    "-r", "30",
-                    "-vsync", "cfr",
+                    # "-r", "30",
+                    # "-vsync", "cfr",
                     "-an",
                     "-movflags", "+faststart",
                     "-max_muxing_queue_size", "10000000",

@@ -31,7 +31,7 @@ for video_extension in video_extensions:
 
         # ffmpeg command. crf default is 23. I cannot tell the difference between original and -crf 15. hyper efficient compression on b/w videos.
 	# videos are 30fps, grayscale, forced to 1920x1080p, and frame seekable. 
-        cmd = f'ffmpeg -i "{video_file}" -vcodec libx265 -preset ultrafast -crf 15 -pix_fmt yuv420p -vf "fps=30,scale=1920:1080:force_original_aspect_ratio=decrease:eval=frame,pad=1920:1080:-1:-1:color=black,format=gray" -an -max_muxing_queue_size 10000000 "{output_file}"'
+        cmd = f'ffmpeg -i "{video_file}" -vcodec libx265 -preset ultrafast -crf 15 -pix_fmt yuv420p -vf "fps=30,scale=1920:1080:force_original_aspect_ratio=decrease:eval=frame,pad=1920:1080:-1:-1:color=black,format=gray" -r 30 -an -movflags +faststart -max_muxing_queue_size 10000000 "{output_file}"'
 
         # execute the command
         subprocess.run(cmd, shell=True)
