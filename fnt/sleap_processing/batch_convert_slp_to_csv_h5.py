@@ -3,6 +3,8 @@ import subprocess
 import tkinter as tk
 from tkinter import filedialog, messagebox
 
+# Converts .slp files to .csv and/or .h5 formats using the sleap-convert command-line tool.
+
 
 # ✅ Initialize global root for Tkinter dialogs and windows
 root = tk.Tk()

@@ -4,9 +4,8 @@ import tkinter as tk
 from tkinter import filedialog, messagebox
 from datetime import datetime
 
-# Initialize global root
-root = tk.Tk()
-root.withdraw()
+
+# ---------------- GUI Prompts ----------------
 
 def prompt_model_type():
     return messagebox.askyesno("Model Type", "Are you using a TOP-DOWN model?\n(Click 'No' for bottom-up)")
@@ -16,13 +15,6 @@ def select_model_folder(title="Select model folder"):
 
 def select_video_folder():
     return filedialog.askdirectory(title="Select folder containing video files for inference")
-
-def get_output_path(video_path):
-    base = os.path.basename(video_path)
-    parent = os.path.dirname(video_path)
-    timestamp = datetime.now().strftime("%y%m%d_%H%M%S")
-    filename = f"{base}.{timestamp}.predictions.slp"
-    return os.path.join(parent, filename)
 
 def ask_export_format():
     selected_formats = []
@@ -49,7 +41,6 @@ def ask_export_format():
     tk.Label(win, text="Select format(s) to export:").pack(pady=10)
     tk.Checkbutton(win, text=".CSV", variable=var_csv).pack(anchor="w", padx=20)
     tk.Checkbutton(win, text=".H5", variable=var_h5).pack(anchor="w", padx=20)
-
     tk.Button(win, text="OK", command=submit).pack(pady=10)
     win.wait_window()
 
@@ -87,6 +78,23 @@ def ask_max_instances():
     win.wait_window()
     return result["max_instances"]
 
+def ask_skip_existing(count_existing, total):
+    return messagebox.askyesno(
+        "Skip Already Processed Videos?",
+        f"{count_existing} out of {total} videos already have associated .slp/.csv/.h5 tracking files.\n\n"
+        "Do you want to skip these videos?"
+    )
+
+
+# ---------------- Inference + Conversion ----------------
+
+def get_output_path(video_path):
+    base = os.path.basename(video_path)
+    parent = os.path.dirname(video_path)
+    timestamp = datetime.now().strftime("%y%m%d_%H%M%S")
+    filename = f"{base}.{timestamp}.predictions.slp"
+    return os.path.join(parent, filename)
+
 def convert_slp_to_format(slp_path, fmt):
     ext = f".analysis.{fmt}"
     output_file = slp_path.replace(".slp", ext)
@@ -103,7 +111,6 @@ def convert_slp_to_format(slp_path, fmt):
 
 def run_inference_and_convert(video_file, model_paths, max_instances, formats):
     cmd = ["sleap-track", video_file]
-
     for model_path in model_paths:
         cmd += ["-m", os.path.join(model_path, "training_config.json")]
 
@@ -120,7 +127,6 @@ def run_inference_and_convert(video_file, model_paths, max_instances, formats):
         "--publish_port", "9001",
         "-o", output_file
     ]
-
     if max_instances is not None:
         cmd += ["--max_instances", str(max_instances)]
 
@@ -131,7 +137,13 @@ def run_inference_and_convert(video_file, model_paths, max_instances, formats):
     for fmt in formats:
         convert_slp_to_format(output_file, fmt)
 
+
+# ---------------- Main ----------------
+
 def main():
+    root = tk.Tk()
+    root.withdraw()
+
     video_folders = []
     while True:
         folder = select_video_folder()
@@ -140,14 +152,12 @@ def main():
         video_folders.append(folder)
         if not messagebox.askyesno("More folders?", "Would you like to add another folder?"):
             break
-
     if not video_folders:
         print("❌ No folders selected.")
         return
 
     is_top_down = prompt_model_type()
     model_paths = []
-
     if is_top_down:
         model_paths.append(select_model_folder("Select CENTROID model folder"))
         model_paths.append(select_model_folder("Select CENTERED INSTANCE model folder"))
@@ -160,15 +170,29 @@ def main():
         print("⚠️ No export format selected. Exiting.")
         return
 
-    for folder in video_folders:
-        video_files = [f for f in os.listdir(folder) if f.lower().endswith((".mp4", ".avi", ".mov"))]
-        if not video_files:
-            print(f"⚠️ No video files found in: {folder}")
-            continue
+    all_videos = []
+    existing_videos = []
 
-        for video_file in video_files:
-            full_path = os.path.join(folder, video_file)
-            run_inference_and_convert(full_path, model_paths, max_instances, formats)
+    for folder in video_folders:
+        for f in os.listdir(folder):
+            if f.lower().endswith((".mp4", ".avi", ".mov")):
+                full_path = os.path.join(folder, f)
+                all_videos.append(full_path)
+
+                base = os.path.splitext(f)[0]
+                slp = [x for x in os.listdir(folder) if x.startswith(base) and x.endswith(".slp")]
+                csv = [x for x in os.listdir(folder) if x.startswith(base) and x.endswith(".analysis.csv")]
+                h5 = [x for x in os.listdir(folder) if x.startswith(base) and x.endswith(".analysis.h5")]
+                if slp or csv or h5:
+                    existing_videos.append(full_path)
+
+    skip_existing = ask_skip_existing(len(existing_videos), len(all_videos))
+
+    for video in all_videos:
+        if skip_existing and video in existing_videos:
+            print(f"⏭️ Skipping {os.path.basename(video)} (existing tracking files detected)")
+            continue
+        run_inference_and_convert(video, model_paths, max_instances, formats)
 
     print("\n✅ Inference, tracking, and export complete for all videos.")
 
