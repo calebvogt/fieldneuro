@@ -117,7 +117,7 @@ def run_inference_and_convert(video_file, model_paths, max_instances, formats):
     output_file = get_output_path(video_file)
     cmd += [
         "--no-empty-frames",
-        "--verbosity", "json",
+        "--verbosity", "rich",
         "--video.input_format", "channels_last",
         "--gpu", "auto",
         "--batch_size", "4",
