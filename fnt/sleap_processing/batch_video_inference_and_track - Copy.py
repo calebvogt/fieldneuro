@@ -5,6 +5,8 @@ from tkinter import filedialog, messagebox
 from datetime import datetime
 
 
+# ---------------- GUI Prompts ----------------
+
 def prompt_model_type():
     return messagebox.askyesno("Model Type", "Are you using a TOP-DOWN model?\n(Click 'No' for bottom-up)")
 
@@ -83,11 +85,8 @@ def ask_skip_existing(count_existing, total):
         "Do you want to skip these videos?"
     )
 
-def ask_move_empty_videos():
-    return messagebox.askyesno(
-        "Move Videos with No Detections?",
-        "Place videos with no detected instances into a subfolder?\n\n(They will be moved to a folder named 'no_instances_detected')"
-    )
+
+# ---------------- Inference + Conversion ----------------
 
 def get_output_path(video_path):
     base = os.path.basename(video_path)
@@ -95,15 +94,6 @@ def get_output_path(video_path):
     timestamp = datetime.now().strftime("%y%m%d_%H%M%S")
     filename = f"{base}.{timestamp}.predictions.slp"
     return os.path.join(parent, filename)
-
-def is_slp_empty(slp_path):
-    try:
-        import sleap
-        labels = sleap.load_file(slp_path)
-        return not labels.instances or len(labels.skeletons) == 0
-    except Exception as e:
-        print(f"⚠️ Failed to inspect {os.path.basename(slp_path)}: {e}")
-        return True
 
 def convert_slp_to_format(slp_path, fmt):
     ext = f".analysis.{fmt}"
@@ -119,7 +109,7 @@ def convert_slp_to_format(slp_path, fmt):
     print("❗ STDERR:\n", result.stderr)
     return True
 
-def run_inference_and_convert(video_file, model_paths, max_instances, formats, move_empty):
+def run_inference_and_convert(video_file, model_paths, max_instances, formats):
     cmd = ["sleap-track", video_file]
     for model_path in model_paths:
         cmd += ["-m", os.path.join(model_path, "training_config.json")]
@@ -144,15 +134,11 @@ def run_inference_and_convert(video_file, model_paths, max_instances, formats, m
     print("Command:", " ".join(cmd))
     subprocess.run(cmd)
 
-    if move_empty and is_slp_empty(output_file):
-        print(f"📭 No detections in {os.path.basename(video_file)} — moving to subfolder.")
-        dest_folder = os.path.join(os.path.dirname(video_file), "no_instances_detected")
-        os.makedirs(dest_folder, exist_ok=True)
-        os.rename(video_file, os.path.join(dest_folder, os.path.basename(video_file)))
-        return
-
     for fmt in formats:
         convert_slp_to_format(output_file, fmt)
+
+
+# ---------------- Main ----------------
 
 def main():
     root = tk.Tk()
@@ -184,8 +170,6 @@ def main():
         print("⚠️ No export format selected. Exiting.")
         return
 
-    move_empty = ask_move_empty_videos()
-
     all_videos = []
     existing_videos = []
 
@@ -208,7 +192,7 @@ def main():
         if skip_existing and video in existing_videos:
             print(f"⏭️ Skipping {os.path.basename(video)} (existing tracking files detected)")
             continue
-        run_inference_and_convert(video, model_paths, max_instances, formats, move_empty)
+        run_inference_and_convert(video, model_paths, max_instances, formats)
 
     print("\n✅ Inference, tracking, and export complete for all videos.")
 
