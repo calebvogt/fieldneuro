@@ -4,7 +4,6 @@ import tkinter as tk
 from tkinter import filedialog, messagebox
 from datetime import datetime
 
-
 def prompt_model_type():
     return messagebox.askyesno("Model Type", "Are you using a TOP-DOWN model?\n(Click 'No' for bottom-up)")
 
@@ -149,6 +148,7 @@ def run_inference_and_convert(video_file, model_paths, max_instances, formats, m
         dest_folder = os.path.join(os.path.dirname(video_file), "no_instances_detected")
         os.makedirs(dest_folder, exist_ok=True)
         os.rename(video_file, os.path.join(dest_folder, os.path.basename(video_file)))
+        os.rename(output_file, os.path.join(dest_folder, os.path.basename(output_file)))
         return
 
     for fmt in formats:
