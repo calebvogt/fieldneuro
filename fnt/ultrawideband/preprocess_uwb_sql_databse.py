@@ -7,6 +7,8 @@ from tkinter import Tk
 from tkinter.filedialog import askopenfilename
 import glob
 
+## performs smoothing on a UWB dataset stored in an SQLite database
+
 def uwb_smoothing(smoothing='savitzky-golay'):
     """
     Preprocess UWB data from an SQLite database and save the processed data to a CSV file in the same directory.
@@ -59,7 +61,7 @@ def uwb_smoothing(smoothing='savitzky-golay'):
             # Print warning about timezone
             print("Warning: note that timestamp is based on default timezone")
 
-            # Convert location coordinates to meters from inches (from the wiser software)
+            # Convert location coordinates to meters from inches (wiser software uses inches)
             uwb['location_x'] *= 0.0254
             uwb['location_y'] *= 0.0254
 
@@ -147,3 +149,6 @@ def uwb_smoothing(smoothing='savitzky-golay'):
     print(f"Preprocessed UWB data stored in output_df")
     print(len(output_df))
     print(output_df.head())
+
+if __name__ == "__main__":
+    uwb_smoothing()

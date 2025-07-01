@@ -14,6 +14,7 @@ def uwb_convert_database():
     Tk().withdraw()
 
     # Ask user for SQLite file
+    print("Opening file dialog...")
     db_file = askopenfilename(title="Select UWB SQLite database file", filetypes=[("SQLite files", "*.sqlite")])
     if not db_file:
         print("No file selected.")
