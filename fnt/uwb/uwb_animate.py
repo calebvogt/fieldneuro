@@ -89,6 +89,7 @@ def uwb_animate_paths():
     print("Asking user about playback speed...")
     speed_window = tk.Tk()
     speed_window.title("Select Playback Speed")
+    speed_window.geometry("300x500")  # Make window taller to accommodate more buttons
     
     speed_choice = tk.StringVar(value="1")
     
@@ -97,11 +98,22 @@ def uwb_animate_paths():
         speed_window.quit()
         speed_window.destroy()
     
-    tk.Label(speed_window, text="Choose playback speed:").pack(pady=10)
-    tk.Button(speed_window, text="1x (Real-time)", command=lambda: set_speed("1")).pack(pady=5)
-    tk.Button(speed_window, text="2x", command=lambda: set_speed("2")).pack(pady=5)
-    tk.Button(speed_window, text="5x", command=lambda: set_speed("5")).pack(pady=5)
-    tk.Button(speed_window, text="10x", command=lambda: set_speed("10")).pack(pady=5)
+    tk.Label(speed_window, text="Choose playback speed:", font=("Arial", 12, "bold")).pack(pady=10)
+    
+    # Standard speeds
+    tk.Label(speed_window, text="Standard Speeds:", font=("Arial", 10, "bold")).pack(pady=(10,5))
+    tk.Button(speed_window, text="1x (Real-time)", command=lambda: set_speed("1"), width=20).pack(pady=2)
+    tk.Button(speed_window, text="2x", command=lambda: set_speed("2"), width=20).pack(pady=2)
+    tk.Button(speed_window, text="5x", command=lambda: set_speed("5"), width=20).pack(pady=2)
+    tk.Button(speed_window, text="10x", command=lambda: set_speed("10"), width=20).pack(pady=2)
+    
+    # High speeds
+    tk.Label(speed_window, text="High Speeds:", font=("Arial", 10, "bold")).pack(pady=(15,5))
+    tk.Button(speed_window, text="20x", command=lambda: set_speed("20"), width=20).pack(pady=2)
+    tk.Button(speed_window, text="40x", command=lambda: set_speed("40"), width=20).pack(pady=2)
+    tk.Button(speed_window, text="60x", command=lambda: set_speed("60"), width=20).pack(pady=2)
+    tk.Button(speed_window, text="80x", command=lambda: set_speed("80"), width=20).pack(pady=2)
+    tk.Button(speed_window, text="100x", command=lambda: set_speed("100"), width=20).pack(pady=2)
     
     speed_window.mainloop()
     
@@ -464,22 +476,42 @@ def uwb_animate_paths():
             if os.path.isfile(file_path):
                 os.remove(file_path)
 
-        # Calculate time parameters
+        # Calculate actual real-world time parameters
         start_time = day_data['Timestamp'].min()
         end_time = day_data['Timestamp'].max()
-        time_window = 30  # seconds per frame
-        trailing_window = 300  # 5 minutes of trailing data
+        total_real_duration = (end_time - start_time).total_seconds()
         
-        # Adjust frame rate based on playback speed
-        effective_fps = 30 * playback_speed
+        print(f"  Real-world data duration: {total_real_duration:.1f} seconds ({total_real_duration/3600:.2f} hours)")
         
-        # Create time intervals
-        time_starts = pd.date_range(start=start_time, end=end_time, freq=f'{time_window}s')
+        # Set video parameters for accurate time representation
+        # We want each video second to represent (playback_speed) real-world seconds
+        video_fps = 30  # Standard video frame rate
+        real_seconds_per_video_second = playback_speed  # 1x = 1 real second per video second, 2x = 2 real seconds per video second, etc.
+        real_seconds_per_frame = real_seconds_per_video_second / video_fps  # How much real time each frame represents
+        
+        # Calculate trailing window (how much historical data to show in each frame)
+        # Show the last 5 minutes of real time, but scale it appropriately
+        trailing_window_real_seconds = min(300, total_real_duration * 0.1)  # 5 minutes or 10% of total duration, whichever is smaller
+        
+        print(f"  Playback speed: {playback_speed}x real-time")
+        print(f"  Each video second = {real_seconds_per_video_second} real-world seconds")
+        print(f"  Each frame = {real_seconds_per_frame:.2f} real-world seconds")
+        print(f"  Trailing window: {trailing_window_real_seconds:.1f} real-world seconds")
+        
+        # Create time intervals based on real-world time progression
+        time_starts = []
+        current_time = start_time
+        
+        while current_time < end_time:
+            time_starts.append(current_time)
+            current_time += pd.Timedelta(seconds=real_seconds_per_frame)
+        
+        print(f"  Will create {len(time_starts)} frames for {total_real_duration/playback_speed:.1f} seconds of video")
 
         # Create frames
         with tqdm(total=len(time_starts), desc=f"Creating frames for {date_str}") as pbar:
             for i, frame_start in enumerate(time_starts):
-                frame_end = frame_start + pd.Timedelta(seconds=trailing_window)
+                frame_end = frame_start + pd.Timedelta(seconds=trailing_window_real_seconds)
                 
                 fig, ax = plt.subplots(figsize=(10, 8))
                 ax.grid(True, alpha=0.3)
@@ -499,10 +531,14 @@ def uwb_animate_paths():
                     # Plot trailing path
                     ax.plot(tag_data[x_col], tag_data[y_col], color=color, alpha=0.6, linewidth=1.5)
                     
-                    # Plot current position (last point)
-                    if not tag_data.empty:
-                        current_x = tag_data[x_col].iloc[-1]
-                        current_y = tag_data[y_col].iloc[-1]
+                    # Plot current position (most recent point within a small time window)
+                    # Get the most recent data point within the last few seconds of real time
+                    current_window_start = frame_start
+                    current_data = tag_data[tag_data['Timestamp'] >= current_window_start]
+                    
+                    if not current_data.empty:
+                        current_x = current_data[x_col].iloc[-1]
+                        current_y = current_data[y_col].iloc[-1]
                         ax.plot(current_x, current_y, 'o', color=color, markersize=8)
                         ax.text(current_x, current_y + 0.2, label, fontsize=8, ha='center', color=color)
 
@@ -511,7 +547,14 @@ def uwb_animate_paths():
                 ax.set_ylim(y_min, y_max)
                 ax.set_xlabel('X Coordinate (meters)')
                 ax.set_ylabel('Y Coordinate (meters)')
-                ax.set_title(f'UWB Tag Paths - {date_str}\nTime: {frame_start.strftime("%H:%M:%S")}')
+                
+                # Calculate elapsed time for title
+                elapsed_real_seconds = (frame_start - start_time).total_seconds()
+                elapsed_hours = int(elapsed_real_seconds // 3600)
+                elapsed_minutes = int((elapsed_real_seconds % 3600) // 60)
+                elapsed_secs = int(elapsed_real_seconds % 60)
+                
+                ax.set_title(f'UWB Tag Paths - {date_str} ({playback_speed}x speed)\nReal Time: {frame_start.strftime("%H:%M:%S")} (+{elapsed_hours:02d}:{elapsed_minutes:02d}:{elapsed_secs:02d})')
 
                 # Save frame
                 filename = os.path.join(output_dir, f"frame_{i:04d}.png")
@@ -521,13 +564,13 @@ def uwb_animate_paths():
 
                 pbar.update(1)
 
-        # Create video using ffmpeg
+        # Create video using ffmpeg with the standard frame rate
         video_name = f"uwb_animation_{date_str}_{playback_speed}x.mp4"
         video_output_path = os.path.join(output_dir, video_name)
         
-        print(f"Rendering video with ffmpeg...")
+        print(f"Rendering video with ffmpeg at {video_fps} fps...")
         subprocess.call([
-            'ffmpeg', '-framerate', str(effective_fps), '-i', os.path.join(output_dir, 'frame_%04d.png'),
+            'ffmpeg', '-framerate', str(video_fps), '-i', os.path.join(output_dir, 'frame_%04d.png'),
             '-c:v', 'libx264', '-preset', 'medium', '-crf', '23', '-pix_fmt', 'yuv420p', 
             video_output_path, '-y'
         ])
@@ -536,7 +579,9 @@ def uwb_animate_paths():
         final_video_path = os.path.join(sql_file_dir, video_name)
         shutil.move(video_output_path, final_video_path)
         
+        expected_video_duration = total_real_duration / playback_speed
         print(f"Video saved: {video_name}")
+        print(f"Video duration: {expected_video_duration:.1f} seconds ({expected_video_duration/60:.1f} minutes)")
 
         # Clean up PNG files
         print("Cleaning up temporary frame files...")
