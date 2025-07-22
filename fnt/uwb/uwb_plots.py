@@ -389,10 +389,16 @@ def create_occupancy_heatmap_3d(data, tag_color_map, tag_label_map, occupancy_sc
     
     print("  3D occupancy heatmaps complete.")
 
-def create_actograms(data, tag_color_map, tag_label_map, velocity_threshold=0.1):
+def create_actograms(data, tag_color_map, tag_label_map, velocity_threshold=0.1, lights_on_hour=7.0, lights_off_hour=19.0, selected_timezone="UTC"):
     """
     Create actogram plots for each tag showing circadian activity patterns.
     Based on plot_actogram from the notebook.
+    
+    Parameters:
+    velocity_threshold (float): Speed threshold in m/s to define activity
+    lights_on_hour (float): Hour when lights turn on (24-hour format, in local timezone)
+    lights_off_hour (float): Hour when lights turn off (24-hour format, in local timezone)
+    selected_timezone (str): The timezone the data has been converted to
     """
     print("Creating actograms...")
     
@@ -428,7 +434,7 @@ def create_actograms(data, tag_color_map, tag_label_map, velocity_threshold=0.1)
         tag_data['active'] = tag_data['velocity'] > velocity_threshold
         
         # Create the actogram plot
-        plt.figure(figsize=(8, 6))
+        plt.figure(figsize=(10, 7))
         
         # Plot activity lines
         for day in tag_data['Day'].unique():
@@ -440,13 +446,27 @@ def create_actograms(data, tag_color_map, tag_label_map, velocity_threshold=0.1)
                 for hour in hours:
                     plt.plot([hour, hour], [day - 0.4, day + 0.4], color='black', linewidth=0.5)
         
-        # Add gray shading for dark periods (assuming lights off at 7PM, on at 7AM)
-        plt.axvspan(19, 24, color='gray', alpha=0.3, label='Dark period')
-        plt.axvspan(0, 7, color='gray', alpha=0.3)
+        # Add gray shading for dark periods
+        # Note: lights_on_hour and lights_off_hour are already in the correct timezone
+        if lights_off_hour < lights_on_hour:
+            # Lights off at midnight, on later in the day (e.g., off at 0:00, on at 12:00)
+            # This means dark period is from lights_off_hour to lights_on_hour
+            plt.axvspan(lights_off_hour, lights_on_hour, color='gray', alpha=0.3, label='Dark period')
+        elif lights_off_hour > lights_on_hour:
+            # Lights off/on spans midnight (e.g., off at 19:00, on at 07:00)  
+            # This means dark period is from lights_off_hour to 24:00 and from 0:00 to lights_on_hour
+            plt.axvspan(lights_off_hour, 24, color='gray', alpha=0.3, label='Dark period')
+            plt.axvspan(0, lights_on_hour, color='gray', alpha=0.3)
+        else:
+            # lights_off_hour == lights_on_hour (edge case, no dark period or all dark)
+            print(f"    Warning: Lights on and off at same time ({lights_on_hour}), no dark period plotted")
         
         plt.xlabel('Hour of Day')
         plt.ylabel('Day of Trial')
-        plt.title(f'Actogram - {label}')
+        
+        # Create timezone-aware title
+        tz_display = selected_timezone if selected_timezone != "UTC" else "UTC"
+        plt.title(f'Actogram - {label}\n(Velocity threshold: {velocity_threshold} m/s, Dark: {int(lights_off_hour):02d}:{int((lights_off_hour%1)*60):02d}-{int(lights_on_hour):02d}:{int((lights_on_hour%1)*60):02d} {tz_display})')
         plt.gca().invert_yaxis()
         
         # Set y-axis ticks to show all days
@@ -462,6 +482,116 @@ def create_actograms(data, tag_color_map, tag_label_map, velocity_threshold=0.1)
         plt.show(block=False)
     
     print("  Actograms complete.")
+
+def create_cumulative_distance_plots(data, tag_color_map, tag_label_map):
+    """
+    Create cumulative distance traveled plots, faceted by day with all animals on each subplot.
+    X-axis: Time, Y-axis: Cumulative distance traveled (starting from 0 each day)
+    Each animal starts at 0 for each day, all animals shown together per day.
+    """
+    print("  Creating cumulative distance plots...")
+    
+    # Prepare the data
+    data_copy = data.copy()
+    
+    # Ensure data is sorted by timestamp
+    data_copy = data_copy.sort_values(['shortid', 'Timestamp'])
+    
+    # Calculate distance between consecutive points for each animal
+    x_col = 'smoothed_x' if 'smoothed_x' in data_copy.columns else 'location_x'
+    y_col = 'smoothed_y' if 'smoothed_y' in data_copy.columns else 'location_y'
+    
+    # Calculate distance step for each animal separately
+    data_copy['distance_step'] = data_copy.groupby('shortid').apply(
+        lambda group: np.sqrt(
+            group[x_col].diff()**2 + group[y_col].diff()**2
+        ).fillna(0)
+    ).reset_index(level=0, drop=True)
+    
+    # Calculate cumulative distance per day per animal (reset to 0 each day)
+    data_copy['cumulative_distance'] = data_copy.groupby(['shortid', 'Date'])['distance_step'].cumsum()
+    
+    # Create time column for plotting (hours from start of each day)
+    data_copy['time_of_day'] = (
+        data_copy['Timestamp'] - data_copy['Timestamp'].dt.normalize()
+    ).dt.total_seconds() / 3600  # Convert to hours
+    
+    # Get unique days across all animals
+    unique_days = sorted(data_copy['Date'].unique())
+    unique_tags = sorted(data_copy['shortid'].unique())
+    
+    # Calculate the maximum cumulative distance across all animals and days for consistent y-axis
+    max_cumulative_distance = data_copy['cumulative_distance'].max()
+    print(f"    Maximum cumulative distance across all animals/days: {max_cumulative_distance:.2f} m")
+    
+    # Calculate number of subplot rows and columns
+    num_days = len(unique_days)
+    num_cols = min(4, num_days)  # Max 4 columns
+    num_rows = (num_days + num_cols - 1) // num_cols
+    
+    # Create the faceted plot
+    fig, axes = plt.subplots(num_rows, num_cols, figsize=(5 * num_cols, 4 * num_rows))
+    fig.suptitle('Cumulative Distance Traveled - All Animals by Day', fontsize=18, y=0.98)
+    
+    # Handle the case of single subplot
+    if num_days == 1:
+        axes = [axes]
+    elif num_rows == 1:
+        axes = axes if hasattr(axes, '__len__') else [axes]
+    else:
+        axes = axes.flatten()
+    
+    for i, day in enumerate(unique_days):
+        ax = axes[i]
+        day_data = data_copy[data_copy['Date'] == day]
+        
+        if not day_data.empty:
+            # Plot each animal's cumulative distance
+            for tag in unique_tags:
+                tag_day_data = day_data[day_data['shortid'] == tag]
+                
+                if not tag_day_data.empty:
+                    color = tag_color_map[tag]
+                    label = tag_label_map[tag]
+                    
+                    # Plot the line
+                    line, = ax.plot(tag_day_data['time_of_day'], tag_day_data['cumulative_distance'], 
+                                   color=color, linewidth=2, alpha=0.8, label=label)
+                    
+                    # Add label at the end of the line
+                    if len(tag_day_data) > 0:
+                        # Get the last point for labeling
+                        last_time = tag_day_data['time_of_day'].iloc[-1]
+                        last_distance = tag_day_data['cumulative_distance'].iloc[-1]
+                        
+                        # Add text label slightly to the right of the line end
+                        ax.text(last_time + 0.5, last_distance, label, 
+                               color=color, fontsize=9, fontweight='bold',
+                               verticalalignment='center')
+            
+            # Add some styling
+            ax.set_xlabel('Time of Day (hours)')
+            ax.set_ylabel('Cumulative Distance (m)')
+            ax.set_title(f'Day {day}', fontsize=14, fontweight='bold')
+            ax.grid(True, alpha=0.3)
+            ax.set_xlim(0, 25)  # Show full 24-hour period + space for labels
+            
+            # Format x-axis to show hours nicely
+            ax.set_xticks([0, 6, 12, 18, 24])
+            ax.set_xticklabels(['0:00', '6:00', '12:00', '18:00', '24:00'])
+            
+            # Set consistent y-axis limits across all subplots
+            ax.set_ylim(0, max_cumulative_distance * 1.05)  # Add 5% padding at top
+    
+    # Hide any unused subplots
+    for i in range(num_days, len(axes)):
+        fig.delaxes(axes[i])
+    
+    plt.tight_layout()
+    plt.show(block=False)
+    print(f"    Combined cumulative distance plot complete.")
+    
+    print("  All cumulative distance plots complete.")
 
 def uwb_create_plots():
     """
@@ -485,12 +615,139 @@ def uwb_create_plots():
 
     print(f"Selected file: {file_path}")
 
-    # 2. Ask user if they want to downsample to 1Hz
+    # 2. Plot type selection
+    print("Prompting user to select plot types...")
+    plot_selection_window = tk.Tk()
+    plot_selection_window.title("Select Plot Types to Generate")
+    plot_selection_window.geometry("400x500")
+    
+    # Create main frame for plot selection
+    plot_frame = tk.Frame(plot_selection_window)
+    plot_frame.pack(padx=20, pady=20, fill="both", expand=True)
+    
+    # Title
+    tk.Label(plot_frame, text="Select Plot Types to Generate", 
+             font=("Arial", 16, "bold")).pack(pady=(0, 20))
+    tk.Label(plot_frame, text="Choose which visualizations you want to create:", 
+             font=("Arial", 10, "italic")).pack(pady=(0, 15))
+    
+    # Plot type variables and widget storage
+    plot_types = {}  # Keep for Select All/None buttons
+    plot_selections = {}  # Track actual selections with callback approach
+    plot_descriptions = [
+        ("basic_trajectories", "Full Trajectory Plots", "Combined and individual path plots showing complete movement traces"),
+        ("daily_faceted", "Daily Faceted Trajectories", "Day-by-day trajectory plots in grid format (uses seaborn FacetGrid)"),
+        ("cumulative_distance", "Cumulative Distance Traveled", "Time-series plots showing cumulative distance traveled by each animal, faceted by day"),
+        ("occupancy_2d", "2D Occupancy Heatmaps", "Heat maps showing spatial usage patterns across days"),
+        ("occupancy_3d", "3D Occupancy Heatmaps", "3D surface plots of spatial occupancy"),
+        ("actograms", "Circadian Actograms", "Activity patterns over time showing circadian rhythms")
+    ]
+    
+    # Initialize selections dictionary
+    for plot_key, _, _ in plot_descriptions:
+        plot_selections[plot_key] = False  # Default to none selected
+    
+    # Create callback function maker - use simple toggle approach
+    def make_plot_toggle_callback(plot_key):
+        def toggle():
+            # Simply toggle our own state tracking - don't rely on BooleanVar
+            plot_selections[plot_key] = not plot_selections[plot_key]
+            print(f"DEBUG: {plot_key} toggled to {'Selected' if plot_selections[plot_key] else 'Not selected'}")
+        return toggle
+    
+    for plot_key, plot_name, plot_desc in plot_descriptions:
+        # Create frame for each plot type
+        plot_type_frame = tk.Frame(plot_frame)
+        plot_type_frame.pack(fill="x", pady=8, padx=5)
+        
+        # Checkbox variable (for Select All/None buttons)
+        plot_var = tk.BooleanVar()
+        plot_var.set(False)  # Default to none selected
+        plot_types[plot_key] = plot_var
+        
+        # Checkbox with callback function
+        checkbox = tk.Checkbutton(plot_type_frame, variable=plot_var, 
+                                font=("Arial", 11, "bold"),
+                                command=make_plot_toggle_callback(plot_key))
+        checkbox.pack(side="left", anchor="n", pady=2)
+        
+        # Plot name and description
+        label_frame = tk.Frame(plot_type_frame)
+        label_frame.pack(side="left", fill="x", expand=True, padx=(5, 0))
+        
+        tk.Label(label_frame, text=plot_name, font=("Arial", 11, "bold"), 
+                anchor="w").pack(anchor="w")
+        tk.Label(label_frame, text=plot_desc, font=("Arial", 9), 
+                anchor="w", wraplength=300).pack(anchor="w")
+    
+    # Store results - will be filled after mainloop
+    selected_plot_types = {}
+    
+    def select_all_plots():
+        for var in plot_types.values():
+            var.set(True)
+        for plot_key in plot_selections:
+            plot_selections[plot_key] = True
+        print("DEBUG: All plots selected")
+    
+    def select_no_plots():
+        for var in plot_types.values():
+            var.set(False)
+        for plot_key in plot_selections:
+            plot_selections[plot_key] = False
+        print("DEBUG: No plots selected")
+    
+    def on_plot_selection_submit():
+        print("Collecting plot selections...")
+        for plot_key, selected in plot_selections.items():
+            print(f"  {plot_key}: {'Selected' if selected else 'Not selected'}")
+        
+        # Validate that at least one plot type is selected
+        if not any(plot_selections.values()):
+            messagebox.showwarning("No Plots Selected", 
+                                 "Please select at least one plot type to generate.")
+            return
+        
+        # Copy selections to selected_plot_types for consistency with rest of code
+        selected_plot_types.update(plot_selections)
+        
+        plot_selection_window.quit()
+        plot_selection_window.destroy()
+        print("Plot type selection window closed.")
+    
+    # Buttons frame
+    button_frame = tk.Frame(plot_frame)
+    button_frame.pack(pady=20)
+    
+    tk.Button(button_frame, text="Select All", 
+              command=select_all_plots,
+              font=("Arial", 10)).pack(side="left", padx=5)
+    tk.Button(button_frame, text="Select None", 
+              command=select_no_plots,
+              font=("Arial", 10)).pack(side="left", padx=5)
+    tk.Button(button_frame, text="Continue", command=on_plot_selection_submit,
+              font=("Arial", 10, "bold")).pack(side="left", padx=15)
+    
+    plot_selection_window.mainloop()
+    
+    # Validate results after mainloop
+    if not selected_plot_types:
+        print("ERROR: No plot type selections captured. Exiting.")
+        return
+        
+    # Double-check that at least one plot is selected
+    if not any(selected_plot_types.values()):
+        print("ERROR: No plot types selected. Exiting.")
+        return
+    
+    print(f"Selected plot types: {[key for key, selected in selected_plot_types.items() if selected]}")
+
+    # 3. Ask user if they want to downsample to 1Hz (only if needed)
     print("Prompting user for downsampling option...")
     downsample = messagebox.askyesno("Downsample Data", "Do you want to downsample the data to 1Hz?")
     print(f"Downsampling option selected: {'Yes' if downsample else 'No'}")
 
-    # 3. Create a new window for smoothing method selection
+    # 4. Create a new window for smoothing method selection
     print("Prompting user for smoothing method...")
     smoothing_window = tk.Tk()
     smoothing_window.title("Select Smoothing Method")
@@ -520,7 +777,7 @@ def uwb_create_plots():
     smoothing = smoothing_choice.get()
     print(f"Smoothing method selected: {smoothing}")
 
-    # 4. Timezone selection
+    # 5. Timezone selection
     print("Asking user about timezone...")
     timezone_window = tk.Tk()
     timezone_window.title("Select US Timezone")
@@ -546,6 +803,148 @@ def uwb_create_plots():
     selected_timezone = timezone_choice.get()
     print(f"Selected timezone: {selected_timezone}")
 
+    # 6. Circadian actogram parameters (only if actograms are selected)
+    actogram_params = {}
+    if selected_plot_types.get('actograms', False):
+        print("Asking user for circadian actogram parameters...")
+        actogram_window = tk.Tk()
+        actogram_window.title("Circadian Actogram Parameters")
+        actogram_window.geometry("400x300")
+        
+        # Variables to store parameters
+        velocity_threshold = tk.DoubleVar(value=0.1)
+        lights_on_time = tk.StringVar(value="1200")  # Default to your experiment: noon
+        lights_off_time = tk.StringVar(value="0000")  # Default to your experiment: midnight
+        
+        # Create main frame
+        main_frame = tk.Frame(actogram_window)
+        main_frame.pack(padx=20, pady=20, fill="both", expand=True)
+        
+        # Title
+        tk.Label(main_frame, text="Circadian Actogram Parameters", 
+                 font=("Arial", 14, "bold")).pack(pady=(0, 20))
+        
+        # Velocity threshold section
+        velocity_frame = tk.Frame(main_frame)
+        velocity_frame.pack(fill="x", pady=10)
+        
+        tk.Label(velocity_frame, text="Velocity Threshold (m/s):", 
+                 font=("Arial", 10, "bold")).pack(anchor="w")
+        tk.Label(velocity_frame, text="(Movement above this speed is considered 'active')", 
+                 font=("Arial", 9, "italic")).pack(anchor="w")
+        tk.Label(velocity_frame, text="Default: 0.1 m/s", 
+                 font=("Arial", 9, "italic")).pack(anchor="w")
+        
+        velocity_entry = tk.Entry(velocity_frame, textvariable=velocity_threshold, width=10)
+        velocity_entry.pack(anchor="w", pady=(5, 0))
+        
+        # Light schedule section
+        lights_frame = tk.Frame(main_frame)
+        lights_frame.pack(fill="x", pady=20)
+        
+        tk.Label(lights_frame, text="Light Schedule (Military Time):", 
+                 font=("Arial", 10, "bold")).pack(anchor="w")
+        tk.Label(lights_frame, text="Format: HHMM (e.g., 1200 for 12:00 PM, 0000 for midnight)", 
+                 font=("Arial", 9, "italic")).pack(anchor="w")
+        
+        # Lights on
+        lights_on_frame = tk.Frame(lights_frame)
+        lights_on_frame.pack(fill="x", pady=(10, 5))
+        tk.Label(lights_on_frame, text="Lights ON time:", width=15, anchor="w").pack(side="left")
+        lights_on_entry = tk.Entry(lights_on_frame, textvariable=lights_on_time, width=8)
+        lights_on_entry.pack(side="left", padx=(10, 0))
+        
+        # Lights off
+        lights_off_frame = tk.Frame(lights_frame)
+        lights_off_frame.pack(fill="x", pady=5)
+        tk.Label(lights_off_frame, text="Lights OFF time:", width=15, anchor="w").pack(side="left")
+        lights_off_entry = tk.Entry(lights_off_frame, textvariable=lights_off_time, width=8)
+        lights_off_entry.pack(side="left", padx=(10, 0))
+        
+        def validate_time_format(time_str):
+            """Validate military time format HHMM"""
+            if len(time_str) != 4 or not time_str.isdigit():
+                return False
+            hours = int(time_str[:2])
+            minutes = int(time_str[2:])
+            return 0 <= hours <= 23 and 0 <= minutes <= 59
+        
+        def on_actogram_submit():
+            print("Collecting circadian actogram parameters...")
+            
+            # Get velocity threshold
+            try:
+                vel_thresh = float(velocity_threshold.get())
+                if vel_thresh < 0:
+                    raise ValueError("Velocity threshold must be positive")
+            except ValueError as e:
+                messagebox.showerror("Invalid Input", f"Invalid velocity threshold: {e}")
+                return
+            
+            # Get and validate light times
+            lights_on = lights_on_time.get().strip()
+            lights_off = lights_off_time.get().strip()
+            
+            if not validate_time_format(lights_on):
+                messagebox.showerror("Invalid Input", 
+                                   "Invalid lights ON time format. Use HHMM (e.g., 0700)")
+                return
+            
+            if not validate_time_format(lights_off):
+                messagebox.showerror("Invalid Input", 
+                                   "Invalid lights OFF time format. Use HHMM (e.g., 1900)")
+                return
+            
+            # Convert to hours for plotting
+            lights_on_hour = int(lights_on[:2]) + int(lights_on[2:]) / 60.0
+            lights_off_hour = int(lights_off[:2]) + int(lights_off[2:]) / 60.0
+            
+            actogram_params['velocity_threshold'] = vel_thresh
+            actogram_params['lights_on_hour'] = lights_on_hour
+            actogram_params['lights_off_hour'] = lights_off_hour
+            actogram_params['lights_on_str'] = lights_on
+            actogram_params['lights_off_str'] = lights_off
+            
+            print(f"  Velocity threshold: {vel_thresh} m/s")
+            print(f"  Lights ON: {lights_on} ({lights_on_hour:.2f} hours)")
+            print(f"  Lights OFF: {lights_off} ({lights_off_hour:.2f} hours)")
+            
+            actogram_window.quit()
+            actogram_window.destroy()
+        
+        # Submit button
+        tk.Button(main_frame, text="Continue", command=on_actogram_submit, 
+                  font=("Arial", 10, "bold")).pack(pady=20)
+        
+        actogram_window.mainloop()
+        
+        # Debug: Check what was collected
+        print(f"Actogram params collected: {actogram_params}")
+        
+        if not actogram_params:
+            print("WARNING: No actogram parameters collected. Using defaults.")
+            actogram_params = {
+                'velocity_threshold': 0.1,
+                'lights_on_hour': 12.0,  # noon
+                'lights_off_hour': 0.0,  # midnight
+                'lights_on_str': '1200',
+                'lights_off_str': '0000'
+            }
+            print(f"Using default params: {actogram_params}")
+        else:
+            print(f"Successfully collected user params: {actogram_params}")
+    
+    else:
+        print("Actograms not selected, skipping parameter collection.")
+        # Set default parameters for potential use (though won't be needed)
+        actogram_params = {
+            'velocity_threshold': 0.1,
+            'lights_on_hour': 12.0,
+            'lights_off_hour': 0.0,
+            'lights_on_str': '1200',
+            'lights_off_str': '0000'
+        }
+
     print("All user preferences collected! Now checking available tags...")
     print("=" * 50)
 
@@ -564,7 +963,7 @@ def uwb_create_plots():
         
     print(f"Found {len(available_tags)} unique tags in database: {list(available_tags['shortid'])}")
 
-    # 5. Tag selection and metadata window
+    # 7. Tag selection and metadata window
     print("Opening tag selection and metadata window...")
     unique_tag_ids = list(available_tags['shortid'])
     
@@ -818,66 +1217,95 @@ def uwb_create_plots():
     # Increase the figure limit to handle multiple plots
     plt.rcParams['figure.max_open_warning'] = 50
     
-    # Plot combined view with all tags
-    print("Creating combined plot with all tags...")
-    plt.figure(figsize=(10, 8))
-    for tag in data['shortid'].unique():
-        tag_data = data[data['shortid'] == tag]
-        x_col = 'smoothed_x' if 'smoothed_x' in tag_data.columns else 'location_x'
-        y_col = 'smoothed_y' if 'smoothed_y' in tag_data.columns else 'location_y'
-
-        color = tag_color_map[tag]
-        label = tag_label_map[tag]
-        plt.plot(tag_data[x_col], tag_data[y_col], label=label, color=color)
-
-    plt.xlabel('X Coordinate (meters)')
-    plt.ylabel('Y Coordinate (meters)')
-    plt.title('UWB Tag Paths - Combined View')
-    plt.legend()
-    plt.grid(True)
-    plt.show(block=False)  # Non-blocking show
-    print("Combined plot complete.")
-    
-    # Plot individual views for each tag
-    print("Creating individual plots for each tag...")
-    for tag in data['shortid'].unique():
-        tag_data = data[data['shortid'] == tag]
-        x_col = 'smoothed_x' if 'smoothed_x' in tag_data.columns else 'location_x'
-        y_col = 'smoothed_y' if 'smoothed_y' in tag_data.columns else 'location_y'
-
-        color = tag_color_map[tag]
-        label = tag_label_map[tag]
-        
+    # Generate only selected plot types
+    if selected_plot_types.get('basic_trajectories', False):
+        # Plot combined view with all tags
+        print("Creating combined plot with all tags...")
         plt.figure(figsize=(10, 8))
-        plt.plot(tag_data[x_col], tag_data[y_col], label=label, color=color, linewidth=2)
+        for tag in data['shortid'].unique():
+            tag_data = data[data['shortid'] == tag]
+            x_col = 'smoothed_x' if 'smoothed_x' in tag_data.columns else 'location_x'
+            y_col = 'smoothed_y' if 'smoothed_y' in tag_data.columns else 'location_y'
+
+            color = tag_color_map[tag]
+            label = tag_label_map[tag]
+            plt.plot(tag_data[x_col], tag_data[y_col], label=label, color=color)
+
         plt.xlabel('X Coordinate (meters)')
         plt.ylabel('Y Coordinate (meters)')
-        plt.title(f'UWB Tag Path - {label}')
+        plt.title('UWB Tag Paths - Combined View')
         plt.legend()
         plt.grid(True)
         plt.show(block=False)  # Non-blocking show
-        print(f"Individual plot for {label} complete.")
+        print("Combined plot complete.")
+        
+        # Plot individual views for each tag
+        print("Creating individual plots for each tag...")
+        for tag in data['shortid'].unique():
+            tag_data = data[data['shortid'] == tag]
+            x_col = 'smoothed_x' if 'smoothed_x' in tag_data.columns else 'location_x'
+            y_col = 'smoothed_y' if 'smoothed_y' in tag_data.columns else 'location_y'
+
+            color = tag_color_map[tag]
+            label = tag_label_map[tag]
+            
+            plt.figure(figsize=(10, 8))
+            plt.plot(tag_data[x_col], tag_data[y_col], label=label, color=color, linewidth=2)
+            plt.xlabel('X Coordinate (meters)')
+            plt.ylabel('Y Coordinate (meters)')
+            plt.title(f'UWB Tag Path - {label}')
+            plt.legend()
+            plt.grid(True)
+            plt.show(block=False)  # Non-blocking show
+            print(f"Individual plot for {label} complete.")
     
     # Create daily faceted plots for each tag
-    print("Creating daily faceted plots for each tag...")
-    create_daily_faceted_plots(data, tag_color_map, tag_label_map, arena_coordinates=None)
+    if selected_plot_types.get('daily_faceted', False):
+        print("Creating daily faceted plots for each tag...")
+        create_daily_faceted_plots(data, tag_color_map, tag_label_map, arena_coordinates=None)
+    
+    # Create cumulative distance plots for each tag
+    if selected_plot_types.get('cumulative_distance', False):
+        print("Creating cumulative distance plots for each tag...")
+        create_cumulative_distance_plots(data, tag_color_map, tag_label_map)
     
     # Create 2D occupancy heatmaps for each tag
-    print("Creating 2D occupancy heatmaps for each tag...")
-    create_occupancy_heatmap_2d(data, tag_color_map, tag_label_map)
+    if selected_plot_types.get('occupancy_2d', False):
+        print("Creating 2D occupancy heatmaps for each tag...")
+        create_occupancy_heatmap_2d(data, tag_color_map, tag_label_map)
     
     # Create 3D occupancy heatmaps for each tag
-    print("Creating 3D occupancy heatmaps for each tag...")
-    create_occupancy_heatmap_3d(data, tag_color_map, tag_label_map, occupancy_scale="daily")
+    if selected_plot_types.get('occupancy_3d', False):
+        print("Creating 3D occupancy heatmaps for each tag...")
+        create_occupancy_heatmap_3d(data, tag_color_map, tag_label_map, occupancy_scale="daily")
     
     # Create actograms for each tag
-    print("Creating actograms for each tag...")
-    create_actograms(data, tag_color_map, tag_label_map, velocity_threshold=0.1)
+    if selected_plot_types.get('actograms', False):
+        print("Creating actograms for each tag...")
+        create_actograms(data, tag_color_map, tag_label_map, 
+                        velocity_threshold=actogram_params['velocity_threshold'],
+                        lights_on_hour=actogram_params['lights_on_hour'],
+                        lights_off_hour=actogram_params['lights_off_hour'],
+                        selected_timezone=selected_timezone)
     
     # Keep plots open - user can interact with them
+    selected_plot_names = []
+    if selected_plot_types.get('basic_trajectories', False):
+        selected_plot_names.append("Full Trajectory Plots")
+    if selected_plot_types.get('daily_faceted', False):
+        selected_plot_names.append("Daily Faceted Trajectories")
+    if selected_plot_types.get('cumulative_distance', False):
+        selected_plot_names.append("Cumulative Distance Traveled")
+    if selected_plot_types.get('occupancy_2d', False):
+        selected_plot_names.append("2D Occupancy Heatmaps")
+    if selected_plot_types.get('occupancy_3d', False):
+        selected_plot_names.append("3D Occupancy Heatmaps")
+    if selected_plot_types.get('actograms', False):
+        selected_plot_names.append("Circadian Actograms")
+    
     print("\n" + "=" * 50)
-    print("🎉 All plots generated successfully!")
-    print("📊 All plots are now displayed and interactive.")
+    print("🎉 Selected plots generated successfully!")
+    print(f"📊 Generated plot types: {', '.join(selected_plot_names)}")
     print("💡 You can zoom, pan, and interact with each plot window.")
     print("🔧 Close individual plot windows when you're done with them.")
     print("⚠️  Note: Plots will remain open until you close them manually.")

@@ -4,12 +4,84 @@ import pandas as pd
 import numpy as np
 from scipy.signal import savgol_filter
 import matplotlib.pyplot as plt
+from matplotlib.patches import Polygon
 import sqlite3
 import os
 import subprocess
 import shutil
 from tqdm import tqdm
 import gc
+import xml.etree.ElementTree as ET
+
+def parse_wiser_xml_zones(xml_file_path):
+    """
+    Parse Wiser XML configuration file to extract zone coordinates.
+    
+    Parameters:
+    xml_file_path (str): Path to the Wiser XML configuration file
+    
+    Returns:
+    pd.DataFrame: DataFrame with columns ['zone', 'x', 'y'] containing zone coordinates in meters
+    """
+    try:
+        # Parse the XML file
+        tree = ET.parse(xml_file_path)
+        root = tree.getroot()
+        
+        # Find the Zones section
+        zones_element = root.find('Zones')
+        if zones_element is None:
+            print("No Zones section found in XML file")
+            return None
+        
+        zone_data = []
+        
+        # Iterate through each zone
+        for zone in zones_element.findall('Zone'):
+            zone_name = zone.get('name')
+            if zone_name is None:
+                continue
+                
+            # Find the Shape element
+            shape = zone.find('Shape')
+            if shape is None:
+                continue
+                
+            # Extract all points for this zone
+            for point in shape.findall('Point'):
+                x_str = point.get('x')
+                y_str = point.get('y')
+                
+                if x_str is not None and y_str is not None:
+                    try:
+                        # Convert coordinates to meters (same as location data: inches to meters)
+                        x_meters = float(x_str) * 0.0254  # Convert inches to meters
+                        y_meters = float(y_str) * 0.0254  # Convert inches to meters
+                        
+                        zone_data.append({
+                            'zone': zone_name,
+                            'x': x_meters,
+                            'y': y_meters
+                        })
+                    except ValueError:
+                        print(f"Warning: Could not convert coordinates for zone {zone_name}: x={x_str}, y={y_str}")
+                        continue
+        
+        if not zone_data:
+            print("No valid zone coordinates found in XML file")
+            return None
+        
+        # Create DataFrame
+        df_zones = pd.DataFrame(zone_data)
+        print(f"Parsed {len(df_zones['zone'].unique())} zones with {len(df_zones)} total coordinate points")
+        return df_zones
+        
+    except ET.ParseError as e:
+        print(f"Error parsing XML file: {e}")
+        return None
+    except Exception as e:
+        print(f"Error reading XML file: {e}")
+        return None
 
 def uwb_animate_paths():
     """
@@ -119,6 +191,43 @@ def uwb_animate_paths():
     
     playback_speed = int(speed_choice.get())
     print(f"Playback speed: {playback_speed}x")
+
+    # 6. Arena/Zone coordinates from XML configuration file
+    print("Asking user about arena zone coordinates...")
+    arena_coords_window = tk.Tk()
+    arena_coords_window.title("Arena Zone Coordinates")
+    arena_coords_window.geometry("400x200")
+    
+    arena_coords_choice = tk.StringVar(value="no")
+    
+    def set_arena_coords(choice):
+        arena_coords_choice.set(choice)
+        arena_coords_window.quit()
+        arena_coords_window.destroy()
+    
+    tk.Label(arena_coords_window, text="Do you want to provide Wiser zone coordinates", font=("Arial", 12, "bold")).pack(pady=10)
+    tk.Label(arena_coords_window, text="via an XML configuration file?", font=("Arial", 12, "bold")).pack(pady=(0,10))
+    tk.Button(arena_coords_window, text="Yes - Select XML File", command=lambda: set_arena_coords("yes"), width=20).pack(pady=5)
+    tk.Button(arena_coords_window, text="No - Continue without zones", command=lambda: set_arena_coords("no"), width=20).pack(pady=5)
+    
+    arena_coords_window.mainloop()
+    
+    arena_coordinates = None
+    if arena_coords_choice.get() == "yes":
+        print("User selected to provide XML configuration file...")
+        xml_file_path = filedialog.askopenfilename(title="Select Wiser XML Configuration File", filetypes=[("XML Files", "*.xml")])
+        
+        if xml_file_path:
+            print(f"Selected XML file: {os.path.basename(xml_file_path)}")
+            arena_coordinates = parse_wiser_xml_zones(xml_file_path)
+            if arena_coordinates is not None:
+                print(f"Successfully parsed {len(arena_coordinates)} zone coordinate points from XML")
+            else:
+                print("Failed to parse XML file - continuing without zone coordinates")
+        else:
+            print("No XML file selected - continuing without zone coordinates")
+    else:
+        print("User chose to continue without zone coordinates")
 
     # Quick database query to get available dates and tags without loading all data
     print("Checking database for available tags and dates...")
@@ -466,7 +575,7 @@ def uwb_animate_paths():
             tag_label_map[tag] = f"Tag {tag}"
             print(f"  Tag {tag}: color={color}, label='Tag {tag}' (fallback)")
 
-    def create_daily_video(day_data, date_str):
+    def create_daily_video(day_data, date_str, arena_coords=None):
         """Creates a video for a single day."""
         print(f"Creating video for {date_str}...")
         
@@ -515,6 +624,20 @@ def uwb_animate_paths():
                 
                 fig, ax = plt.subplots(figsize=(10, 8))
                 ax.grid(True, alpha=0.3)
+
+                # Plot arena coordinates if provided
+                if arena_coords is not None:
+                    for zone in arena_coords['zone'].unique():
+                        zone_coords = arena_coords[arena_coords['zone'] == zone][['x', 'y']].values
+                        if len(zone_coords) >= 3:  # Need at least 3 points to make a polygon
+                            polygon = Polygon(zone_coords, closed=True, edgecolor='black', facecolor='none', linewidth=1.5, alpha=0.8)
+                            ax.add_patch(polygon)
+                            
+                            # Add zone label at centroid
+                            centroid_x = zone_coords[:, 0].mean()
+                            centroid_y = zone_coords[:, 1].mean()
+                            ax.text(centroid_x, centroid_y, zone, fontsize=8, ha='center', va='center', 
+                                   bbox=dict(boxstyle="round,pad=0.3", facecolor='white', alpha=0.7))
 
                 # Plot each tag
                 for tag in unique_tags:
@@ -594,7 +717,7 @@ def uwb_animate_paths():
     for date in selected_date_list:
         day_data = data[data['Date'] == date]
         if not day_data.empty:
-            create_daily_video(day_data, str(date))
+            create_daily_video(day_data, str(date), arena_coordinates)
 
     print("All animations complete!")
 
