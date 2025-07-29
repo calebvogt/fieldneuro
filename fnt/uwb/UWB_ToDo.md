@@ -1,5 +1,7 @@
 # To Do
 - behavioral classification module
+- For animation output, add ability to check boxes related to whether aligned IR cameras should be shown, different types of plots, etc, broken up into panels. 
+- In the long term, it may also be really cool to have a command center at voleterra that shows plots that are update every 10 minutes or so with what is going on out in the field. 
 - uwb_animate
 	- add behavior classification function
 	- incorporate behavior classifier visualization to uwb_animate
